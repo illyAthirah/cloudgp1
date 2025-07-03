@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloud & BYOD Auth Demo - GCP</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="container">
+    <h1>Cloud & BYOD Authentication Simulation</h1>
+    <p>This demo illustrates various authentication challenges in a BYOD and Cloud environment.</p>
+    <form id="authForm">
+        <input type="text" id="username" name="username" placeholder="Username (try byoduser, admin, guest)" required>
+        <input type="password" id="password" name="password" placeholder="Password (securepass, cloudadmin, byodguest)" required>
+        <button type="submit">Login to Cloud</button>
+    </form>
+    <div id="result"></div>
+    <div class="info">
+        <p><strong>Example Credentials:</strong></p>
+        <ul>
+            <li>Username: `byoduser` | Password: `securepass` (Simulates BYOD compliant login)</li>
+            <li>Username: `admin` | Password: `cloudadmin` (Simulates enterprise admin login)</li>
+            <li>Username: `guest` | Password: `byodguest` (Simulates federated guest access)</li>
+            <li>Any other credentials will result in a failed login.</li>
+        </ul>
+    </div>
+</div>
+<script src="/static/script.js"></script>
+</body>
+</html>

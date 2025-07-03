@@ -1,0 +1,9 @@
+runtime: python39 # Specify Python 3.9 runtime (you can choose 310 or 311 if you prefer newer Python versions and Flask supports them)
+entrypoint: gunicorn -b :$PORT main:app # How to run your Flask app with Gunicorn
+
+handlers:
+  - url: /static
+    static_dir: static # Serve content from the 'static' directory
+
+  - url: /.*
+    script: auto # Route all other requests to your main.py application
