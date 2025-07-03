@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Register</title>
+</head>
+<body>
+    <h1>Register</h1>
+    <form method="POST" action="{{ url_for('register') }}">
+        <label for="username">Username:</label>
+        <input type="text" id="username" name="username" required><br><br>
+
+        <label for="password">Password:</label>
+        <input type="password" id="password" name="password" required><br><br>
+
+        <label for="role">Select Role:</label>
+        <select id="role" name="role" required>
+            <option value="">-- Select Role --</option>
+            <option value="BYOD User">BYOD User</option>
+            <option value="Administrator">Administrator</option>
+            <option value="Guest">Guest</option>
+        </select><br><br>
+
+        <button type="submit">Register</button>
+    </form>
+
+    <p>Already have an account? <a href="{{ url_for('index') }}">Back to Login</a></p>
+</body>
+</html>

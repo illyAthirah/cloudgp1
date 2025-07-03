@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard - Cloud & BYOD Auth</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Welcome, {{ username }}!</h1>
+        <p><strong>Role:</strong> {{ role }}</p>
+
+        <hr>
+
+        <h2>Login History</h2>
+        {% if logs %}
+            <ul>
+                {% for log in logs %}
+                    <li>{{ log.login_time.strftime('%Y-%m-%d %H:%M:%S') }} — {{ log.role }}</li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>No login history available.</p>
+        {% endif %}
+
+        <hr>
+
+        <a href="{{ url_for('logout') }}">
+            <button>Logout</button>
+        </a>
+    </div>
+</body>
+</html>
