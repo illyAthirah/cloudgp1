@@ -1,25 +1,26 @@
 import os
+import datetime
+import pyotp
+import qrcode
+from io import BytesIO
+import base64
 
-from flask import flash
-
-os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_dance.contrib.google import make_google_blueprint, google
-import datetime
-import pyotp  # Added for TOTP
-import qrcode # Added for QR code generation
-from io import BytesIO # Added to handle image data in memory
-import base64 # Added to encode image for HTML display
+
+# Set this environment variable for OAUTHLIB_INSECURE_TRANSPORT if running locally over HTTP
+# Remove or set to '0' for production with HTTPS
+os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
 app = Flask(__name__, static_folder='static')
-app.secret_key = 'your_secret_key_here'  # Needed for session management
+app.secret_key = 'your_secret_key_here' # IMPORTANT: Change this to a strong, random secret key in production
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# Google SSO Blueprint
+# Google OAuth Blueprint
 google_bp = make_google_blueprint(
     client_id="344509022009-rf4vjmv3267iknkrm2e734dklmbjegl3.apps.googleusercontent.com",
     client_secret="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",
@@ -28,22 +29,11 @@ google_bp = make_google_blueprint(
         "https://www.googleapis.com/auth/userinfo.email",
         "openid"
     ],
-    redirect_url="/"
+    redirect_url="/" # This should ideally be a dedicated callback URL, but for simple demo, '/' can work
 )
 app.register_blueprint(google_bp, url_prefix="/login")
 
-# ---------------------------
-# Models
-# ---------------------------
-
-# This is a mock user dictionary for initial testing.
-# MFA will not be applied to these users.
-users = {
-    'byoduser': {'password': 'securepass', 'role': 'BYOD User'},
-    'admin': {'password': 'cloudadmin', 'role': 'Administrator'},
-    'guest': {'password': 'byodguest', 'role': 'Guest'}
-}
-
+# Database Models
 class UserLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(100), nullable=False)
@@ -55,23 +45,16 @@ class RegisteredUser(db.Model):
     username = db.Column(db.String(100), unique=True, nullable=False)
     password_hash = db.Column(db.String(200), nullable=False)
     role = db.Column(db.String(50), nullable=False)
-    # --- ADDED: Column to store the TOTP secret key for MFA ---
-    totp_secret = db.Column(db.String(32), nullable=True)
+    totp_secret = db.Column(db.String(32), nullable=True) # Stores the TOTP secret for MFA
 
-# ---------------------------
-# Initialize DB
-# ---------------------------
-
+# Create database tables if they don't exist
 with app.app_context():
     db.create_all()
 
-# ---------------------------
-# Routes
-# ---------------------------
+# --- Routes ---
 
 @app.route("/")
 def index():
-    # Google SSO
     if google.authorized:
         resp = google.get("/oauth2/v2/userinfo")
         if resp.ok:
@@ -80,25 +63,41 @@ def index():
 
             registered_user = RegisteredUser.query.filter_by(username=email).first()
             if not registered_user:
-                # For Google users, we don't set a password or TOTP secret initially
+                # If Google user not in DB, register them and generate MFA secret
+                # Note: For Google SSO users, we are auto-generating a password_hash and totp_secret.
+                # The password_hash here is just a placeholder as they won't use it for direct login.
                 new_user = RegisteredUser(
                     username=email,
-                    password_hash=generate_password_hash(pyotp.random_base32()), # Generate a random password hash
-                    role='Google User'
+                    password_hash=generate_password_hash(pyotp.random_base32()), # Placeholder password
+                    role='Google User', # Default role for Google SSO users
+                    totp_secret=pyotp.random_base32() # Generate MFA secret
                 )
                 db.session.add(new_user)
                 db.session.commit()
+                # Redirect to MFA setup for new Google users
+                session['username_for_mfa_setup'] = email
+                return redirect(url_for('mfa_setup'))
 
-            session['authenticated'] = True
-            session['username'] = email
-            session['role'] = 'Google User'
-            return redirect(url_for('dashboard'))
+            # For existing Google users, proceed to MFA verification if they have a secret
+            if registered_user.totp_secret:
+                session['mfa_required'] = True
+                session['username'] = registered_user.username
+                session['role'] = registered_user.role # Set role for dashboard
+                return redirect(url_for('mfa_verify'))
+            else:
+                # This case should ideally not happen if a secret is always generated on registration.
+                # But as a fallback, if an existing Google user somehow doesn't have a secret,
+                # you might want to redirect them to setup or handle it.
+                # For this demo, let's assume all Google users will have a secret after their first login.
+                session['authenticated'] = True
+                session['username'] = email
+                session['role'] = registered_user.role
+                return redirect(url_for('dashboard'))
 
-    # If already logged in, redirect to dashboard
+    # If already authenticated (after MFA verification for local or Google login)
     if session.get('authenticated'):
         return redirect(url_for('dashboard'))
 
-    # Otherwise, show the login page
     return render_template('index.html')
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -108,62 +107,57 @@ def register():
         password = request.form['password']
         role = request.form['role']
 
+        if not username or not password or not role:
+            return render_template('register.html', error="All fields are required.")
+
         existing_user = RegisteredUser.query.filter_by(username=username).first()
         if existing_user:
-            return "Username already exists. Try a different one."
+            return render_template('register.html', error="Username already exists. Try a different one.")
 
         hashed_password = generate_password_hash(password)
-
-        # --- ADDED: Generate a TOTP secret for the new user ---
-        secret = pyotp.random_base32()
+        secret = pyotp.random_base32() # Generate TOTP secret during registration
 
         new_user = RegisteredUser(
             username=username,
             password_hash=hashed_password,
             role=role,
-            totp_secret=secret # Save the secret to the user's record
+            totp_secret=secret
         )
         db.session.add(new_user)
         db.session.commit()
 
-        # --- MODIFIED: Redirect to MFA setup instead of login ---
-        # Store username in session to retrieve it on the setup page
+        # Store username in session to retrieve it in mfa_setup route
         session['username_for_mfa_setup'] = username
         return redirect(url_for('mfa_setup'))
 
     return render_template('register.html')
 
-# --- NEW ROUTE: To show QR code for MFA setup ---
 @app.route('/mfa-setup')
 def mfa_setup():
-    # Retrieve the username stored in the session after registration
     username = session.get('username_for_mfa_setup')
     if not username:
+        # If no username in session, redirect to index or register
         return redirect(url_for('index'))
 
     user = RegisteredUser.query.filter_by(username=username).first()
     if not user or not user.totp_secret:
-        # If user or secret doesn't exist, something went wrong.
+        # Should not happen if secret is generated on registration/Google SSO first login
         return redirect(url_for('register'))
 
-    # Generate the provisioning URI for the authenticator app
+    # Generate TOTP provisioning URI and QR code
     totp = pyotp.TOTP(user.totp_secret)
+    # Use the application name as issuer_name for clarity in authenticator app
     uri = totp.provisioning_uri(name=user.username, issuer_name="YourCloudApp")
 
-    # Generate the QR code image
     img = qrcode.make(uri)
     buf = BytesIO()
     img.save(buf)
     buf.seek(0)
-
-    # Encode the image to a base64 string to embed in the HTML
     img_b64 = base64.b64encode(buf.read()).decode('utf-8')
 
-    # Clear the temporary session variable
+    # Remove the temporary session variable after use
     session.pop('username_for_mfa_setup', None)
 
-    # You will need to create an 'mfa_setup.html' template
-    # This template should display the QR code and instruct the user to scan it.
     return render_template('mfa_setup.html', qr_code=img_b64)
 
 @app.route('/authenticate', methods=['POST'])
@@ -171,90 +165,63 @@ def authenticate():
     username = request.form.get('username')
     password = request.form.get('password')
 
-    # 1. Check mock users (no MFA)
-    if username in users and password == users[username]['password']:
-        session['authenticated'] = True
-        session['username'] = username
-        session['role'] = users[username]['role']
-        log = UserLog(username=username, role=users[username]['role'])
-        db.session.add(log)
-        db.session.commit()
-        # ... role messages ...
-        return jsonify({
-            "message": "Authentication successful!",
-            "status": "success",
-            "redirect": url_for('dashboard')
-        })
-
-    # 2. Check registered users
     registered_user = RegisteredUser.query.filter_by(username=username).first()
+
     if registered_user and check_password_hash(registered_user.password_hash, password):
-        # --- MODIFIED: Check if MFA is enabled for this user ---
         if registered_user.totp_secret:
-            # Password is correct, but MFA is required.
-            # Don't log them in yet. Store username and set a flag.
+            # If user has MFA enabled, require MFA verification
             session['mfa_required'] = True
             session['username'] = registered_user.username
+            session['role'] = registered_user.role # Store role for dashboard
             return jsonify({
                 "status": "mfa_required",
-                "redirect": url_for('mfa_verify') # Redirect to the MFA verification page
+                "redirect": url_for('mfa_verify')
             })
         else:
-            # No MFA secret, log in directly
-            session['authenticated'] = True
-            session['username'] = registered_user.username
-            session['role'] = registered_user.role
-            log = UserLog(username=registered_user.username, role=registered_user.role)
-            db.session.add(log)
-            db.session.commit()
+            # This case should be rare if all users get a secret on registration.
+            # But if a user somehow exists without a secret, they cannot proceed.
             return jsonify({
-                "message": f"Welcome back, {registered_user.username}!",
-                "status": "success",
-                "redirect": url_for('dashboard')
+                "message": "MFA is not set up for this user. Please contact admin or re-register.",
+                "status": "error"
             })
 
-    # Failed login
+    # If standard username/password authentication fails
     return jsonify({
         "message": "Authentication failed. Please check your credentials.",
         "status": "error"
     })
 
-# --- NEW ROUTE: To verify the TOTP code from the user ---
 @app.route('/mfa-verify', methods=['GET', 'POST'])
 def mfa_verify():
-    if not session.get('mfa_required'):
+    # Ensure MFA is required and username is in session
+    if not session.get('mfa_required') or not session.get('username'):
+        return redirect(url_for('index'))
+
+    username = session.get('username')
+    user = RegisteredUser.query.filter_by(username=username).first()
+
+    if not user:
+        session.clear() # Clear session if user not found (shouldn't happen)
         return redirect(url_for('index'))
 
     if request.method == 'POST':
         otp_input = request.form.get('otp')
-        username = session.get('username')
-        user = RegisteredUser.query.filter_by(username=username).first()
-
-        if not user:
-            session.clear()
-            return redirect(url_for('index'))
 
         totp = pyotp.TOTP(user.totp_secret)
         if totp.verify(otp_input):
-            # OTP is correct. Finalize login.
+            # MFA successful! Clear MFA flags, set authenticated, and log activity.
             session.pop('mfa_required', None)
             session['authenticated'] = True
-            session['role'] = user.role
-
-            # Save login log
-            log = UserLog(username=user.username, role=user.role)
+            # User role is already set from /authenticate or / in case of Google SSO
+            log = UserLog(username=user.username, role=session.get('role', 'Unknown'))
             db.session.add(log)
             db.session.commit()
-
             return redirect(url_for('dashboard'))
         else:
             # Invalid OTP
-            # You need an 'mfa_verify.html' template
             return render_template('mfa_verify.html', error="Invalid OTP. Please try again.")
 
-    # For GET request, just show the verification form
     return render_template('mfa_verify.html')
-
 
 @app.route('/dashboard')
 def dashboard():
@@ -262,25 +229,24 @@ def dashboard():
         return redirect(url_for('index'))
 
     username = session.get('username')
-    role = session.get('role')
+    role = session.get('role') # Retrieve role from session
     logs = UserLog.query.filter_by(username=username).order_by(UserLog.login_time.desc()).all()
 
     return render_template('dashboard.html',
                            username=username,
-                           role=role,
+                           role=role, # Pass role to template
                            logs=logs)
 
 @app.route('/logout')
 def logout():
-    # Remove Google OAuth token if present
-    session.pop('google_oauth_token', None)
-    # Clear app session data
-    session.clear()
-    flash("You have been logged out.", "success")
+    session.pop('google_oauth_token', None) # Clear Google OAuth token
+    session.clear() # Clear all session variables
+    flash("You have been logged out.", "success") # Optional: Use Flask-Flash for messages
     return redirect(url_for("index"))
 
 @app.route('/show-users')
 def show_users():
+    # Example admin route to view registered users and their MFA status
     if not session.get('authenticated') or session.get('role') != 'Administrator':
         return "Access Denied", 403
     users = RegisteredUser.query.all()
@@ -290,8 +256,5 @@ def show_users():
         output += f"Username: {user.username}, Role: {user.role}, MFA Enabled: {has_mfa}<br>"
     return output
 
-# ---------------------------
-# Run
-# ---------------------------
 if __name__ == '__main__':
     app.run(host='127.0.0.1', port=8080, debug=True)

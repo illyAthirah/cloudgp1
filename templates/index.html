@@ -11,8 +11,8 @@
     <h1>Cloud & BYOD Authentication Simulation</h1>
     <p>This demo illustrates various authentication challenges in a BYOD and Cloud environment.</p>
     <form id="authForm">
-        <input type="text" id="username" name="username" placeholder="Username (try byoduser, admin, guest)" required>
-        <input type="password" id="password" name="password" placeholder="Password (securepass, cloudadmin, byodguest)" required>
+        <input type="text" id="username" name="username" placeholder="Username (register first)" required>
+        <input type="password" id="password" name="password" placeholder="Password" required>
         <button type="submit">Login to Cloud</button>
         <div style="margin-top: 20px;">
             <a href="{{ url_for('google.login') }}">
@@ -23,13 +23,7 @@
     </form>
     <div id="result"></div>
     <div class="info">
-        <p><strong>Example Credentials:</strong></p>
-        <ul>
-            <li>Username: `byoduser` | Password: `securepass` (Simulates BYOD compliant login)</li>
-            <li>Username: `admin` | Password: `cloudadmin` (Simulates enterprise admin login)</li>
-            <li>Username: `guest` | Password: `byodguest` (Simulates federated guest access)</li>
-            <li>Any other credentials will result in a failed login.</li>
-        </ul>
+        <p><strong>Note:</strong> All users must register and set up MFA using an authenticator app (e.g., Google Authenticator).</p>
     </div>
 </div>
 <script src="/static/script.js"></script>

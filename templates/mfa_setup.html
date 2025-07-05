@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MFA Setup</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="container">
+    <h2>Set up Multi-Factor Authentication</h2>
+    <p>Scan this QR code with your Authenticator app (e.g., Google Authenticator):</p>
+    <img src="data:image/png;base64,{{ qr_code }}" alt="MFA QR Code" style="max-width: 250px; height: auto; margin: 20px auto; border: 1px solid #eee; padding: 5px; background-color: #fff;">
+    <p>After scanning and adding the account, you can log in using your username, password, and the 6-digit code from your app.</p>
+    <p class="info">
+        <strong>Important:</strong> After scanning, you can go back to the login page and try logging in. You will then be prompted for the 6-digit code.
+    </p>
+    <a href="{{ url_for('index') }}" class="button">Back to Login</a>
+</div>
+</body>
+</html>

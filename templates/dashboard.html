@@ -6,28 +6,46 @@
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <div class="container">
+<div class="container">
+    <div class="dashboard-header">
         <h1>Welcome, {{ username }}!</h1>
-        <p><strong>Role:</strong> {{ role }}</p>
-
-        <hr>
-
-        <h2>Login History</h2>
-        {% if logs %}
-            <ul>
-                {% for log in logs %}
-                    <li>{{ log.login_time.strftime('%Y-%m-%d %H:%M:%S') }} — {{ log.role }}</li>
-                {% endfor %}
-            </ul>
-        {% else %}
-            <p>No login history available.</p>
-        {% endif %}
-
-        <hr>
-
-        <a href="{{ url_for('logout') }}">
-            <button>Logout</button>
-        </a>
+        <a href="{{ url_for('logout') }}" class="logout-btn">Logout</a>
     </div>
+
+    <div class="auth-status-card success">
+        <div class="status-icon">&#10003;</div>
+        <div class="status-details">
+            <h2>Authentication Successful</h2>
+            <p>You are securely logged in.</p>
+        </div>
+    </div>
+
+    <div class="auth-details-grid">
+        <div class="detail-card">
+            <h3>User Information</h3>
+            <p><strong>Username:</strong> {{ username }}</p>
+            <p><strong>Role:</strong> <span class="active-status">{{ role }}</span></p>
+        </div>
+        <div class="detail-card">
+            <h3>Security Status</h3>
+            <p>Multi-Factor Authentication: <span class="active-status">Enabled</span></p>
+            <div class="security-meter">
+                <div class="security-level high">High</div>
+            </div>
+        </div>
+    </div>
+
+    <h2>Login History</h2>
+    {% if logs %}
+    <ul>
+        {% for log in logs %}
+        <li>{{ log.login_time.strftime('%Y-%m-%d %H:%M:%S') }} — {{ log.role }}</li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p>No login history available.</p>
+    {% endif %}
+
+</div>
 </body>
 </html>

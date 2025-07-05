@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MFA Verification</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="container">
+    <h2>Multi-Factor Authentication</h2>
+    {% if error %}
+    <p class="error">{{ error }}</p>
+    {% endif %}
+    <form method="post">
+        <label for="otp">Enter the 6-digit code from your Authenticator app:</label>
+        <input type="text" name="otp" id="otp" required placeholder="e.g., 123456" pattern="\d{6}" title="Please enter a 6-digit code">
+        <button type="submit">Verify</button>
+    </form>
+</div>
+</body>
+</html>
