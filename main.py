@@ -9,6 +9,7 @@ from flask import Flask, render_template, request, jsonify, session, redirect, u
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_dance.contrib.google import make_google_blueprint, google
+from oauthlib.oauth2.rfc6749.errors import TokenExpiredError
 
 # Set this environment variable for OAUTHLIB_INSECURE_TRANSPORT if running locally over HTTP
 # Remove or set to '0' for production with HTTPS
@@ -53,10 +54,16 @@ with app.app_context():
 
 # --- Routes ---
 
+
 @app.route("/")
 def index():
     if google.authorized:
-        resp = google.get("/oauth2/v2/userinfo")
+        try:
+            resp = google.get("/oauth2/v2/userinfo")
+        except TokenExpiredError:
+            session.clear()
+            flash("Your session has expired. Please log in again.", "warning")
+            return redirect(url_for("index"))
         if resp.ok:
             user_info = resp.json()
             email = user_info['email']

@@ -1,6 +1,9 @@
-flask
+flask~=3.1.1
 flask-sqlalchemy
 flask-dance
-pyotp
-qrcode
+pyotp~=2.9.0
+qrcode~=8.2
 Pillow
+pip~=25.1.1
+django-qrcode~=0.3
+Werkzeug~=3.1.3
